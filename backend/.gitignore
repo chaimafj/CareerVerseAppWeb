@@ -1,0 +1,13 @@
+.venv/
+*.sqlite3
+*.sqlite3-*
+__pycache__/
+*.py[cod]
+.env
+.env.*
+local-settings.ps1
+vapid-keys*
+.dev-secret-key*
+.test-secret-*/
+uploads/
+.pytest_cache/
