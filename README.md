@@ -1,8 +1,7 @@
 # CareerVerse Web
 
 A separate web implementation of CareerVerse, using **Ionic 8 + Angular 20**
-for the frontend and **Django + Django REST Framework** for the API. The
-existing Flutter application is not changed.
+for the frontend and **Django + Django REST Framework** for the API. 
 
 ## Implemented scope
 
