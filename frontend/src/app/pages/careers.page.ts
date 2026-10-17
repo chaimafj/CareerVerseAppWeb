@@ -11,6 +11,7 @@ import { CareerArtComponent } from '../widgets/career-art.component';
 @Component({
   standalone: true,
   imports: [TranslatePipe, FormsModule, RouterLink, IonicModule, CareerArtComponent],
+  styleUrl: './careers.page.scss',
   template: `
     <div class="page-heading"><div><span class="eyebrow">{{ 'A WORLD OF POSSIBILITIES' | t }}</span><h1>{{ 'Find your direction.' | t }}</h1><p class="muted">{{ 'Go beyond job titles. Discover what the work really feels like.' | t }}</p></div><span class="pill">{{ (careers().length) | t }} {{ 'curated careers' | t }}</span></div>
     <div class="search-panel"><input [attr.aria-label]=" 'Search careers' | t " type="search" [placeholder]=" 'Search careers, skills or tools...' | t " [ngModel]="query()" (ngModelChange)="query.set($event)"><select [attr.aria-label]=" 'Filter category' | t " [ngModel]="category()" (ngModelChange)="category.set($event)"><option value="">{{ 'All categories' | t }}</option>@for (c of categories(); track c) { <option [value]="c">{{ (c) | t }}</option> }</select></div>

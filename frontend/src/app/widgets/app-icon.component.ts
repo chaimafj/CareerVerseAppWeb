@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-export type AppIcon = 'home' | 'compass' | 'book' | 'lab' | 'sparkles' | 'user' | 'bell' | 'crown' | 'shield' | 'logout' | 'sun' | 'moon';
+export type AppIcon = 'home' | 'compass' | 'book' | 'lab' | 'sparkles' | 'chatbot' | 'user' | 'bell' | 'crown' | 'shield' | 'logout' | 'sun' | 'moon';
 
 const PATHS: Record<AppIcon, string> = {
   home: 'M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
@@ -8,6 +8,7 @@ const PATHS: Record<AppIcon, string> = {
   book: 'M12 5v16 M12 5C9 3 6 3 3 4v15c3-1 6-1 9 2 3-3 6-3 9-2V4c-3-1-6-1-9 1',
   lab: 'M9 3h6 M10 3v6L4 19c-.6 1 .1 2 1.3 2h13.4c1.2 0 1.9-1 1.3-2L14 9V3 M7 14h10 M10 17h.01 M14 18h.01',
   sparkles: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z M20 2v4 M18 4h4',
+  chatbot: 'M12 3v3 M10 3h4 M7 6h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-4l-4 2v-2H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z M1 11v4 M23 11v4 M8 11v2 M16 11v2 M9 16h6',
   user: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M4 21v-2a8 6 0 0 1 16 0v2',
   bell: 'M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10 M10 21h4',
   crown: 'm3 6 4 4 5-7 5 7 4-4-2 13H5Z M7 22h10',

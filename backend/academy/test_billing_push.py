@@ -247,6 +247,28 @@ class PushTests(TestCase):
             Notification.objects.create(user=self.user, title="Title", body="Body", path="/progress")
         self.assertEqual(len(self.client.get("/api/notifications/").json()), 50)
 
+    def test_unread_count_is_complete_private_and_updates_after_changes(self):
+        notifications = [
+            Notification.objects.create(user=self.user, title="Update", body="Body", path="/careers")
+            for _ in range(61)
+        ]
+        other = User.objects.create_user("other-count@example.test", "password", name="Other")
+        Notification.objects.create(user=other, title="Private", body="Body", path="/careers")
+        self.assertEqual(self.client.get("/api/notifications/count/").json(), {"unread_count": 61})
+        self.assertEqual(len(self.client.get("/api/notifications/").json()), 50)
+        self.assertEqual(self.post(f"/api/notifications/{notifications[0].pk}/read/", {}).status_code, 200)
+        self.assertEqual(self.client.get("/api/notifications/count/").json(), {"unread_count": 60})
+        self.assertEqual(self.post(f"/api/notifications/{notifications[0].pk}/read/", {}).status_code, 200)
+        self.assertEqual(self.client.get("/api/notifications/count/").json(), {"unread_count": 60})
+        self.client.get("/api/csrf/")
+        token = self.client.cookies["csrftoken"].value
+        self.assertEqual(self.client.delete("/api/notifications/", {}, format="json",
+                                           HTTP_X_CSRFTOKEN=token).status_code, 204)
+        self.assertEqual(self.client.get("/api/notifications/count/").json(), {"unread_count": 0})
+        self.assertTrue(Notification.objects.filter(user=other).exists())
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/notifications/count/").status_code, 403)
+
 
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
@@ -261,16 +283,16 @@ class BillingTests(TestCase):
         self.client.get("/api/csrf/")
         self.token = self.client.cookies["csrftoken"].value
         self.checkout = PremiumCheckout.objects.create(
-            user=self.user, session_id="cs_test_mock", price_id="price_mock", amount=1000, currency="usd",
+            user=self.user, session_id="cs_test_mock", price_id="price_mock", amount=499, currency="eur",
         )
         self.session = {
             "id": self.checkout.session_id, "livemode": False, "mode": "payment",
-            "status": "complete", "payment_status": "paid", "amount_total": 1000, "currency": "usd",
+            "status": "complete", "payment_status": "paid", "amount_total": 499, "currency": "eur",
             "client_reference_id": str(self.user.pk),
             "metadata": {"checkout_id": str(self.checkout.pk), "user_id": str(self.user.pk)},
             "line_items": {"has_more": False, "data": [
                 {"quantity": 1, "price": {"id": "price_mock", "livemode": False},
-                 "amount_total": 1000, "currency": "usd"},
+                 "amount_total": 499, "currency": "eur"},
             ]},
         }
 
@@ -289,7 +311,9 @@ class BillingTests(TestCase):
 
     def test_status_disabled_live_keys_origin_and_csrf(self):
         self.assertEqual(self.client.get("/api/billing/status/").json(),
-                         {"configured": True, "premium_until": None, "is_premium": False})
+                         {"configured": True, "premium_until": None, "is_premium": False,
+                          "amount": 499, "currency": "eur", "duration_days": 30,
+                          "checkout_status": None, "transactions": []})
         self.assertEqual(self.client.post("/api/billing/checkout/", {}, format="json").status_code, 403)
         for changes in [
             {"STRIPE_SECRET_KEY": ""}, {"STRIPE_SECRET_KEY": "sk_live_forbidden"},
@@ -307,13 +331,13 @@ class BillingTests(TestCase):
     @patch("academy.billing.stripe.Price.retrieve")
     def test_checkout_server_price_and_no_redirect_grant(self, price, create):
         price.return_value = {"id": "price_mock", "livemode": False, "active": True,
-                              "type": "one_time", "unit_amount": 1000, "currency": "usd"}
+                              "type": "one_time", "unit_amount": 499, "currency": "eur"}
         create.return_value = {"id": "cs_test_new", "livemode": False, "url": "https://checkout.stripe.com/test"}
         response = self.client.post("/api/billing/checkout/", {"price": "evil", "amount": 1},
                                     format="json", HTTP_X_CSRFTOKEN=self.token)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(create.call_args.kwargs["line_items"], [{"price": "price_mock", "quantity": 1}])
-        self.assertEqual(PremiumCheckout.objects.get(session_id="cs_test_new").amount, 1000)
+        self.assertEqual(PremiumCheckout.objects.get(session_id="cs_test_new").amount, 499)
         self.user.refresh_from_db()
         self.assertIsNone(self.user.premium_until)
         price.return_value["livemode"] = True
@@ -349,6 +373,32 @@ class BillingTests(TestCase):
         self.assertLessEqual(self.user.premium_until, timezone.now() + timedelta(days=30))
 
     @patch("academy.billing.stripe.checkout.Session.retrieve")
+    def test_two_distinct_payments_add_sixty_days_and_keep_history_boundaries(self, retrieve):
+        expiry = timezone.now() + timedelta(days=7)
+        self.user.premium_until = expiry
+        self.user.save()
+        retrieve.return_value = self.session
+        self.assertEqual(self.webhook(self.event()).status_code, 200)
+        second = PremiumCheckout.objects.create(
+            user=self.user, session_id="cs_test_second", price_id="price_mock", amount=499, currency="eur",
+        )
+        session = {**self.session, "id": second.session_id,
+                   "metadata": {"checkout_id": str(second.pk), "user_id": str(self.user.pk)}}
+        retrieve.return_value = session
+        self.assertEqual(self.webhook(self.event(session, id="evt_second")).status_code, 200)
+        self.user.refresh_from_db()
+        self.checkout.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(self.user.premium_until, expiry + timedelta(days=60))
+        self.assertEqual(self.checkout.premium_until, expiry + timedelta(days=30))
+        self.assertEqual(second.premium_until, expiry + timedelta(days=60))
+        self.assertEqual(self.webhook(self.event(session, id="evt_second_retry")).status_code, 200)
+        history = self.client.get("/api/billing/status/").json()["transactions"]
+        self.assertEqual([row["id"] for row in history], [second.pk, self.checkout.pk])
+        self.assertEqual(history[0]["premium_until"], second.premium_until.isoformat())
+        self.assertEqual(history[1]["premium_until"], self.checkout.premium_until.isoformat())
+
+    @patch("academy.billing.stripe.checkout.Session.retrieve")
     def test_signature_live_unpaid_and_mismatch(self, retrieve):
         retrieve.return_value = self.session
         self.assertEqual(self.webhook(self.event(), signature=False).status_code, 400)
@@ -357,7 +407,7 @@ class BillingTests(TestCase):
         self.assertEqual(self.webhook(self.event({**self.session, "payment_status": "unpaid"})).status_code, 200)
         retrieve.assert_not_called()
         mutations = [
-            {"amount_total": 1}, {"currency": "eur"}, {"mode": "subscription"},
+            {"amount_total": 1}, {"currency": "usd"}, {"mode": "subscription"},
             {"status": "open"}, {"client_reference_id": "999"},
             {"metadata": {"checkout_id": str(self.checkout.pk), "user_id": "999"}},
             {"id": "cs_unknown"},
@@ -399,3 +449,108 @@ class BillingTests(TestCase):
     def test_account_cleanup(self):
         self.user.delete()
         self.assertFalse(PremiumCheckout.objects.exists())
+
+    @patch("academy.billing.stripe.checkout.Session.retrieve")
+    def test_return_confirmation_without_webhook_and_duplicate_delivery(self, retrieve):
+        retrieve.return_value = self.session
+        expiry = timezone.now() + timedelta(days=5)
+        self.user.premium_until = expiry
+        self.user.save()
+        for _ in range(2):
+            response = self.client.post("/api/billing/confirm/", {"session_id": self.checkout.session_id},
+                                        format="json", HTTP_X_CSRFTOKEN=self.token)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"checkout_status": "paid"})
+        retrieve.assert_called_once()
+        self.assertEqual(self.webhook(self.event()).status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.premium_until, expiry + timedelta(days=30))
+        self.assertEqual(len(self.client.get("/api/billing/status/").json()["transactions"]), 1)
+
+    @patch("academy.billing.stripe.checkout.Session.retrieve")
+    def test_confirmation_owner_csrf_and_paid_session_checks(self, retrieve):
+        payload = {"session_id": self.checkout.session_id}
+        self.assertEqual(self.client.post("/api/billing/confirm/", payload, format="json").status_code, 403)
+        other = User.objects.create_user("other-confirm@example.test", "password", name="Other")
+        self.client.force_login(other)
+        self.client.get("/api/csrf/")
+        token = self.client.cookies["csrftoken"].value
+        self.assertEqual(self.client.post("/api/billing/confirm/", payload, format="json",
+                                         HTTP_X_CSRFTOKEN=token).status_code, 404)
+        retrieve.assert_not_called()
+        self.client.force_login(self.user)
+        self.client.get("/api/csrf/")
+        token = self.client.cookies["csrftoken"].value
+        for changes, expected in [
+            ({"payment_status": "unpaid"}, 200), ({"amount_total": 1}, 400),
+            ({"currency": "usd"}, 400), ({"livemode": True}, 400),
+            ({"metadata": {}}, 400), ({"client_reference_id": str(other.pk)}, 400),
+            ({"status": "open"}, 400),
+            ({"line_items": {"has_more": False, "data": []}}, 400),
+        ]:
+            retrieve.return_value = {**self.session, **changes}
+            response = self.client.post("/api/billing/confirm/", payload, format="json", HTTP_X_CSRFTOKEN=token)
+            self.assertEqual(response.status_code, expected)
+            if changes.get("payment_status") == "unpaid":
+                self.assertEqual(response.json(), {"checkout_status": "pending"})
+        for invalid in [None, 1, "not-a-session", "cs_" + "x" * 256]:
+            self.assertEqual(self.client.post("/api/billing/confirm/", {"session_id": invalid},
+                                             format="json", HTTP_X_CSRFTOKEN=token).status_code, 400)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.premium_until)
+
+    @patch("academy.billing.stripe.checkout.Session.retrieve", side_effect=stripe.APIConnectionError("offline mock"))
+    def test_confirmation_provider_failure_no_access(self, retrieve):
+        self.assertEqual(self.client.post("/api/billing/confirm/", {"session_id": self.checkout.session_id},
+                                         format="json", HTTP_X_CSRFTOKEN=self.token).status_code, 503)
+        self.checkout.refresh_from_db()
+        self.assertIsNone(self.checkout.paid_at)
+
+    @patch("academy.billing.stripe.checkout.Session.create")
+    @patch("academy.billing.stripe.Price.retrieve")
+    def test_exact_offer_required_and_session_return_id(self, price, create):
+        offer = {"id": "price_mock", "livemode": False, "active": True,
+                 "type": "one_time", "unit_amount": 499, "currency": "eur"}
+        create.return_value = {"id": "cs_test_offer", "livemode": False, "url": "https://checkout.stripe.com/test"}
+        for changes in [{"unit_amount": 999}, {"unit_amount": 0}, {"currency": "usd"}, {"type": "recurring"}]:
+            price.return_value = {**offer, **changes}
+            response = self.client.post("/api/billing/checkout/", {}, format="json", HTTP_X_CSRFTOKEN=self.token)
+            self.assertEqual(response.status_code, 503)
+        create.assert_not_called()
+        self.user.premium_until = timezone.now() + timedelta(days=5)
+        self.user.save()
+        price.return_value = offer
+        response = self.client.post("/api/billing/checkout/", {}, format="json", HTTP_X_CSRFTOKEN=self.token)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("session_id={CHECKOUT_SESSION_ID}", create.call_args.kwargs["success_url"])
+        self.assertEqual(create.call_args.kwargs["automatic_tax"], {"enabled": False})
+
+    @patch("academy.billing.stripe.checkout.Session.retrieve")
+    def test_history_paid_only_owner_only_and_renewal_pending(self, retrieve):
+        other = User.objects.create_user("billing-other@example.test", "password", name="Other")
+        PremiumCheckout.objects.create(
+            user=other, session_id="cs_other", price_id="price_mock",
+            amount=499, currency="eur", paid_at=timezone.now(),
+        )
+        self.user.premium_until = timezone.now() + timedelta(days=10)
+        self.user.save()
+        pending = self.client.get("/api/billing/status/?session_id=cs_test_mock").json()
+        self.assertTrue(pending["is_premium"])
+        self.assertEqual(pending["checkout_status"], "pending")
+        self.assertEqual(pending["transactions"], [])
+        self.assertIsNone(self.client.get("/api/billing/status/?session_id=cs_other").json()["checkout_status"])
+        retrieve.return_value = self.session
+        self.assertEqual(self.webhook(self.event()).status_code, 200)
+        data = self.client.get("/api/billing/status/?session_id=cs_test_mock").json()
+        self.assertEqual(data["checkout_status"], "paid")
+        self.assertEqual(len(data["transactions"]), 1)
+        payment = data["transactions"][0]
+        self.assertEqual(payment["amount"], 499)
+        self.assertEqual(payment["currency"], "eur")
+        self.assertEqual(payment["premium_until"], data["premium_until"])
+        self.assertNotIn("session_id", payment)
+        self.assertNotIn("event_id", payment)
+        self.assertEqual(self.webhook(self.event()).status_code, 200)
+        self.assertEqual(len(self.client.get("/api/billing/status/").json()["transactions"]), 1)
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/billing/status/").status_code, 403)

@@ -51,6 +51,11 @@ export class AuthService {
     this.initialization = Promise.resolve();
   }
 
+  async requestPasswordReset(email: string) {
+    await this.api.csrf();
+    await this.api.post('auth/password-reset/', {email: email.trim()}, {'Accept-Language': this.locale.language()});
+  }
+
   async uploadPhoto(file: File) {
     const body = new FormData();
     body.append('photo', file);

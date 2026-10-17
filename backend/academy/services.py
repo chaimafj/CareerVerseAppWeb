@@ -37,6 +37,10 @@ def snapshot_lab(lab):
             not question.multiple and correct_count != 1
         ):
             raise ValidationError({"detail": "This lab has invalid answer configuration."})
+        if question.kind == "sequence" and (
+            len(options) != len(question.workspace["order"]) or correct_count != len(options)
+        ):
+            raise ValidationError({"detail": "This lab has invalid workflow configuration."})
         questions.append({
             "id": question.id,
             "prompt": question.prompt,
@@ -74,7 +78,7 @@ def public_attempt(attempt):
                 "prompt": question["prompt"],
                 "multiple": question["multiple"],
                 "kind": question.get("kind", "quiz"),
-                "workspace": question.get("workspace", {}),
+                "workspace": {key: value for key, value in question.get("workspace", {}).items() if key != "order"},
                 "options": [
                     {"id": option["id"], "text": option["text"]}
                     for option in question["options"] if question.get("kind", "quiz") != "code"
@@ -91,6 +95,7 @@ def public_attempt(attempt):
 
 def grade(snapshot, answers, duration_seconds):
     by_question = {}
+    ordered_answers = {}
     code_answers = {}
     for answer in answers:
         question_id = answer["question_id"]
@@ -100,6 +105,7 @@ def grade(snapshot, answers, duration_seconds):
         if len(option_ids) != len(set(option_ids)):
             raise ValidationError({"answers": "Duplicate option_ids."})
         by_question[question_id] = set(option_ids)
+        ordered_answers[question_id] = option_ids
         if "code_text" in answer:
             code_answers[question_id] = answer["code_text"]
     questions = snapshot["questions"]
@@ -116,7 +122,9 @@ def grade(snapshot, answers, duration_seconds):
         if not question["multiple"] and len(selected) > 1:
             raise ValidationError({"answers": "Single-choice questions accept at most one option."})
         expected = {option["id"] for option in question["options"] if option["correct"]}
-        if question.get("kind", "quiz") == "code":
+        kind = question.get("kind", "quiz")
+        expected_texts = [option["text"] for option in question["options"] if option["id"] in expected]
+        if kind == "code":
             if selected or question["id"] not in code_answers:
                 raise ValidationError({"answers": "Code tasks require code_text and empty option_ids."})
             typed = code_answers[question["id"]]
@@ -124,6 +132,16 @@ def grade(snapshot, answers, duration_seconds):
                 option["text"].strip() for option in question["options"] if option["correct"]
             }
             selected_texts = [typed]
+        elif kind == "sequence":
+            if question["id"] in code_answers:
+                raise ValidationError({"answers": "code_text is only valid for code tasks."})
+            expected_options = [question["options"][index] for index in question["workspace"]["order"]]
+            expected_ids = [option["id"] for option in expected_options]
+            submitted_ids = ordered_answers[question["id"]]
+            is_correct = submitted_ids == expected_ids
+            text_by_id = {option["id"]: option["text"] for option in question["options"]}
+            selected_texts = [text_by_id[option_id] for option_id in submitted_ids]
+            expected_texts = [option["text"] for option in expected_options]
         else:
             if question["id"] in code_answers:
                 raise ValidationError({"answers": "code_text is only valid for code tasks."})
@@ -137,7 +155,7 @@ def grade(snapshot, answers, duration_seconds):
             "correct": is_correct,
             "explanation": question["explanation"],
             "selected_options": selected_texts,
-            "correct_options": [option["text"] for option in question["options"] if option["id"] in expected],
+            "correct_options": expected_texts,
             "kind": question.get("kind", "quiz"),
             "workspace": question.get("workspace", {}),
         })

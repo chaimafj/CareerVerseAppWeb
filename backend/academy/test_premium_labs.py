@@ -16,6 +16,10 @@ def correct_answers(snapshot):
         expected = [option for option in question["options"] if option["correct"]]
         if question.get("kind") == "code":
             answers.append({"question_id": question["id"], "option_ids": [], "code_text": expected[0]["text"]})
+        elif question.get("kind") == "sequence":
+            answers.append({"question_id": question["id"], "option_ids": [
+                question["options"][index]["id"] for index in question["workspace"]["order"]
+            ]})
         else:
             answers.append({"question_id": question["id"], "option_ids": [option["id"] for option in expected]})
     return answers

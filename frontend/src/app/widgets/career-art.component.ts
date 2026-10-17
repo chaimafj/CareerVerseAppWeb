@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-type ArtVariant = 'launch' | 'code' | 'cloud' | 'security' | 'premium';
+type ArtVariant = 'launch' | 'code' | 'cloud' | 'security' | 'premium' | 'ai' | 'data' | 'devops';
 
 @Component({
   selector: 'app-career-art',
@@ -18,6 +18,31 @@ type ArtVariant = 'launch' | 'code' | 'cloud' | 'security' | 'premium';
       </g>
       <g class="art-float">
       @switch (variant) {
+        @case ('ai') {
+          <g stroke="#a78bfa" stroke-width="3">
+            <path d="m111 82 69 40-69 48m69-48 69-40m-69 40 69 48M111 82h138M111 170h138"/>
+            <circle cx="111" cy="82" r="19" fill="#dceaff"/><circle cx="111" cy="170" r="19" fill="#dceaff"/>
+            <circle cx="249" cy="82" r="19" fill="#dceaff"/><circle cx="249" cy="170" r="19" fill="#dceaff"/>
+            <rect x="150" y="92" width="60" height="60" rx="18" fill="#23355e"/>
+          </g>
+          <path d="m168 123 9 9 16-19" stroke="#5eead4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#2dd4bf"><circle cx="111" cy="82" r="6"/><circle cx="249" cy="82" r="6"/><circle cx="111" cy="170" r="6"/><circle cx="249" cy="170" r="6"/></g>
+        }
+        @case ('data') {
+          <rect x="83" y="53" width="194" height="145" rx="16" fill="#192b51" stroke="#8495ff" stroke-width="3"/>
+          <path d="M105 77h80M106 173h147" stroke="#a5b4fc" stroke-width="3" stroke-linecap="round"/>
+          <rect x="116" y="129" width="24" height="34" rx="5" fill="#60a5fa"/>
+          <rect x="154" y="106" width="24" height="57" rx="5" fill="#a78bfa"/>
+          <rect x="192" y="86" width="24" height="77" rx="5" fill="#2dd4bf"/>
+          <path d="m113 115 42-26 44-14 43-16" stroke="#fbbf24" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="242" cy="59" r="7" fill="#fbbf24"/>
+        }
+        @case ('devops') {
+          <path d="M180 123c-38-62-98-62-98 0s60 62 98 0 98-62 98 0-60 62-98 0Z" stroke="#a78bfa" stroke-width="18"/>
+          <path d="m127 77 13 3-6 12m98 77-13-3 6-12" stroke="#5eead4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#192b51" stroke="#84a8ff" stroke-width="3"><rect x="69" y="105" width="38" height="38" rx="10"/><rect x="253" y="105" width="38" height="38" rx="10"/></g>
+          <path d="m80 123 6 6 10-12m168 6 6 6 10-12" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        }
         @case ('code') {
           <rect x="77" y="55" width="206" height="137" rx="16" fill="#192b51" stroke="#8495ff" stroke-width="3"/>
           <path d="M78 84h204" stroke="#8495ff" stroke-opacity=".4"/>
@@ -77,9 +102,12 @@ export class CareerArtComponent {
   get variant(): ArtVariant {
     const subject = this.subject.toLowerCase();
     if (subject.includes('premium')) return 'premium';
+    if (subject.includes('devops')) return 'devops';
+    if (subject.includes('data-science')) return 'data';
+    if (subject.includes('machine-learning') || subject.includes('deep-learning') || subject.includes('ai-engineering')) return 'ai';
     if (subject.includes('cloud')) return 'cloud';
     if (subject.includes('cyber') || subject.includes('security')) return 'security';
-    if (subject.includes('angular') || subject.includes('developer') || subject.includes('code')) return 'code';
+    if (subject.includes('angular') || subject.includes('developer') || subject.includes('code') || subject.includes('full-stack')) return 'code';
     return 'launch';
   }
 }

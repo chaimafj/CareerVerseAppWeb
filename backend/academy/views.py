@@ -24,6 +24,7 @@ from .serializers import (
 from .services import SNAPSHOT_VERSION, grade, lab_results, public_attempt, snapshot_lab
 from .access import premium_active, require_lab_access
 from .push import enqueue_notification, welcome_once
+from .careernet import CareerNet
 
 
 def welcome_language(request):
@@ -293,12 +294,15 @@ class RecommendationsView(APIView):
             slug = result.career_slug
             lab_id = result.attempt.snapshot["lab_id"]
             best[slug][lab_id] = max(best[slug].get(lab_id, 0), result.score)
-        interests = {value.strip().lower() for value in request.user.interests}
+
+        user_interests = request.user.interests or []
+        model = CareerNet()
         recommendations = []
         for career in Career.objects.all():
-            career_interests = {value.strip().lower() for value in career.interests}
-            shared = sorted(interests & career_interests)
-            interest_score = floor(100 * len(shared) / max(1, len(career_interests)) + 0.5)
+            career_interests = career.interests or []
+            shared = sorted({value.strip().lower() for value in user_interests if isinstance(value, str)} &
+                            {value.strip().lower() for value in career_interests if isinstance(value, str)})
+            interest_score = model.score(user_interests, career_interests)
             scores = list(best[career.slug].values())
             performance = round(sum(scores) / len(scores), 2) if scores else 0
             match_score = (

@@ -58,7 +58,7 @@ import { CareerAssessmentComponent } from '../widgets/career-assessment.componen
         @if (q.kind && q.kind !== 'quiz') {
           <app-workshop-workspace [question]="q" [selectedIds]="selections()[q.id] ?? []"
             [code]="codeAnswers()[q.id] ?? ''" [disabled]="saving()" (choose)="toggle(q,$event)"
-            (codeChange)="setCode(q.id,$event)" />
+            (codeChange)="setCode(q.id,$event)" (orderChange)="setOrder(q.id,$event)" />
         } @else {
         <p class="muted">{{ (q.multiple ? 'Select all correct answers.' : 'Select one answer.') | t }}</p><div class="answer-options">
           @for (option of q.options; track option.id; let i = $index) {
@@ -128,14 +128,20 @@ export class LabPage implements OnInit, OnDestroy {
   selected(question: number, option: number) { return (this.selections()[question] ?? []).includes(option); }
   hasAnswer(question: number) {
     const task = this.attempt()?.questions.find(q => q.id === question);
+    if (task?.kind === 'sequence') return (this.selections()[question]?.length ?? 0) === task.options.length;
     return task?.kind === 'code' ? !!this.codeAnswers()[question]?.trim() :
       (this.selections()[question]?.length ?? 0) > 0;
   }
   setCode(question: number, text: string) {
     this.codeAnswers.update(value => ({...value, [question]: text}));
   }
+  setOrder(question: number, order: number[]) {
+    if (this.saving()) return;
+    this.selections.update(value => ({...value, [question]: order}));
+  }
   answeredCount() { return this.attempt()?.questions.filter(q => this.hasAnswer(q.id)).length ?? 0; }
   toggle(question: Question, option: number) {
+    if (this.saving()) return;
     const old = this.selections()[question.id] ?? [];
     const next = question.multiple ? old.includes(option) ? old.filter(id => id !== option) : [...old,option] : [option];
     this.selections.update(value => ({...value,[question.id]:next}));
@@ -183,9 +189,17 @@ export const leaveLabGuard: CanDeactivateFn<LabPage> = component =>
       <div class="detail-grid"><section class="panel"><h2>{{ 'Your answer review' | t }}</h2>@for (feedback of r.feedback; track $index) {
         @if (!errorsOnly() || !feedback.correct) {
         <div class="feedback"><span class="pill" [class.success]="feedback.correct">{{ (feedback.correct ? 'Correct' : 'Incorrect answer') | t }}</span><h3>{{ feedback.prompt }}</h3>
-          @if (feedback.selected_options) { <strong>{{ 'Your selections' | t }}</strong><ul>@for (option of feedback.selected_options; track $index) { <li>{{ option }}</li> }</ul> }
+          @if (feedback.selected_options) {
+            <strong>{{ (feedback.kind === 'sequence' ? 'Your workflow' : 'Your selections') | t }}</strong>
+            @if (feedback.kind === 'sequence') { <ol>@for (option of feedback.selected_options; track $index) { <li>{{ option }}</li> }</ol> }
+            @else { <ul>@for (option of feedback.selected_options; track $index) { <li>{{ option }}</li> }</ul> }
+          }
           @else { <p class="muted">{{ 'Selected answers were not stored for this older attempt.' | t }}</p> }
-          @if (feedback.correct_options) { <strong>{{ 'Expected selections' | t }}</strong><ul>@for (option of feedback.correct_options; track $index) { <li>{{ option }}</li> }</ul> }
+          @if (feedback.correct_options) {
+            <strong>{{ (feedback.kind === 'sequence' ? 'Expected workflow' : 'Expected selections') | t }}</strong>
+            @if (feedback.kind === 'sequence') { <ol>@for (option of feedback.correct_options; track $index) { <li>{{ option }}</li> }</ol> }
+            @else { <ul>@for (option of feedback.correct_options; track $index) { <li>{{ option }}</li> }</ul> }
+          }
           @if (feedback.kind === 'code' && feedback.workspace) {
             <h4>{{ 'Corrected code' | t }}</h4>
             <pre dir="ltr"><code>{{ feedback.workspace.before }}{{ feedback.correct_options?.[0] }}{{ feedback.workspace.after }}</code></pre>

@@ -28,16 +28,26 @@ def evidence_task(prompt, context, options, correct, explanation, skill):
     }
 
 
+def sequence_task(prompt, context, options, order, explanation, skill):
+    return {
+        "prompt": prompt, "kind": "sequence", "workspace": {"context": context, "order": order},
+        "options": options, "correct": list(range(len(options))), "skill": skill,
+        "explanation": explanation, "example": "\n".join(
+            f"{position}. {options[index]}" for position, index in enumerate(order, 1)
+        ),
+    }
+
+
 PREMIUM_LABS = [
     {
         "career": "angular", "title": "Launch-day checkout rescue",
         "scenario": "You are repairing a student subscription portal before release. "
-                    "Complete five missing code fragments in an Angular review workspace. "
-                    "Inspect the surrounding code and enter the exact replacement requested. "
+                    "Repair code fragments and arrange a controlled release workflow. "
+                    "Inspect the surrounding code and review each step before release. "
                     "Your edits are evaluated after submission; no code is executed.",
         "objectives": ["Repair a server-authoritative payment check", "Cancel stale search requests",
                        "Restore accessible validation", "Surface errors without losing input",
-                       "Add an authorization regression assertion"],
+                       "Sequence a guarded release"],
         "questions": [
             code_task(
                 "Repair the condition: access must depend on the API's is_premium field. Enter the property expression.",
@@ -64,18 +74,20 @@ PREMIUM_LABS = [
                 "showError",
                 "Explicit error feedback is necessary. Calling showSuccess would hide the failure; clearing input would prevent an easy retry.",
                 "reliability"),
-            code_task(
-                "Complete the expected HTTP status for a student requesting another student's private result. Enter the number.",
-                "const response = await studentClient.get(otherStudentResultUrl);\nexpect(response.status).toBe(", ");",
-                "404",
-                "This API filters private results by owner, so another student's result is not found (404). This avoids confirming that a private record exists.",
+            sequence_task(
+                "Build the release gate from first step to last. Use every stage once.",
+                "The repair is ready for review. Validation must precede staging; staging checks precede production exposure.",
+                ["Promote the validated build to production", "Run type checks and authorization regression tests",
+                 "Verify checkout and error recovery in staging", "Deploy the validated build to staging"],
+                [1, 3, 2, 0],
+                "Check the repair, deploy the same validated build to staging, verify realistic flows, then promote it with monitoring.",
                 "release quality"),
         ],
     },
     {
         "career": "cloud", "title": "Restore service under pressure",
         "scenario": "Build a resilient registration architecture using five visual design workspaces. "
-                    "Each diagram has one missing component. Place a component from the bank into the "
+                    "Place missing components in diagrams, then plan a recovery drill. Place a component from the bank into the "
                     "highlighted slot, review the resulting data flow, and justify the design through the final feedback. "
                     "The diagrams are simplified educational models, not deployed infrastructure.",
         "objectives": ["Distribute incoming traffic", "Absorb demand spikes",
@@ -105,11 +117,13 @@ PREMIUM_LABS = [
                 ["Random new charge ID", "Browser success flag", "Disable transaction", "Idempotency lookup"], 3,
                 "The operation ID is checked against persisted outcomes. A transaction or uniqueness rule must also guard concurrent duplicate requests.",
                 "distributed reliability"),
-            architecture_task(
-                "A host failure must not destroy both production data and backups. Choose the final destination for encrypted backups.",
-                ["Production database", "Encrypted backup job", ""], 2,
-                ["Same host temporary folder", "Isolated backup storage", "Public bucket without access control", "Browser localStorage"], 1,
-                "Use a separate failure domain with restricted access, retention and restore drills. Encryption alone does not prove that restoration works.",
+            sequence_task(
+                "Arrange the backup recovery drill in operational order.",
+                "Use an isolated recovery environment. Validate restored records before moving any traffic.",
+                ["Validate restored data and application behavior", "Restore into an isolated recovery environment",
+                 "Record verified recovery time and follow-up actions", "Select and verify an independently stored backup"],
+                [3, 1, 0, 2],
+                "A separate failure domain is essential. Verify a backup, restore it in isolation, test the recovered application and record measured recovery evidence.",
                 "disaster recovery"),
         ],
     },
@@ -152,14 +166,13 @@ PREMIUM_LABS = [
                 ["Publish student's details", "Delete all evidence", "Revoke affected sessions", "Share session token"], 2,
                 "Revoke affected sessions, preserve evidence and use trusted identity recovery. Publishing identity or deleting logs worsens incident handling.",
                 "containment"),
-            evidence_task(
-                "Select the two verification events that support recovery. Do not assume a success message proves containment.",
-                "After revoking S7 and completing trusted recovery, verify access controls.",
-                ["09:30 Old session S7 | GET /own-profile | 401",
-                 "09:31 Support message | 'probably fixed' | no checks",
-                 "09:32 New MFA session S8 | GET /own-profile | 200",
-                 "09:33 Old session S7 | GET /private-results | 200"], [0, 2],
-                "Rejecting the old session and allowing a verified new MFA session support recovery. Old-session private access means containment failed and requires further action.",
+            sequence_task(
+                "Arrange the recovery verification workflow after the affected sessions have been revoked.",
+                "Evidence has already been preserved. Recovery must use a trusted identity channel before issuing a fresh session.",
+                ["Verify old-session rejection and new-session owner checks", "Complete trusted identity recovery",
+                 "Record verified recovery and monitor for recurrence", "Issue a new session after MFA"],
+                [1, 3, 0, 2],
+                "Establish trusted identity, issue a fresh MFA-backed session, test old and new access boundaries, then document and monitor recovery.",
                 "recovery verification"),
         ],
     },

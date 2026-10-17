@@ -148,7 +148,7 @@ class Question(models.Model):
     skill = models.CharField(max_length=100)
     kind = models.CharField(max_length=16, default="quiz", choices=[
         ("quiz", "Quiz"), ("code", "Code repair"), ("architecture", "Architecture builder"),
-        ("evidence", "Evidence analysis"),
+        ("evidence", "Evidence analysis"), ("sequence", "Workflow simulation"),
     ])
     workspace = models.JSONField(default=dict, blank=True)
 
@@ -172,6 +172,14 @@ class Question(models.Model):
             )
         elif valid and self.kind == "evidence":
             valid = set(data) == {"context"} and isinstance(data["context"], str)
+        elif valid and self.kind == "sequence":
+            valid = (
+                set(data) == {"context", "order"} and isinstance(data["context"], str)
+                and isinstance(data["order"], list) and 3 <= len(data["order"]) <= 8
+                and all(type(index) is int for index in data["order"])
+                and sorted(data["order"]) == list(range(len(data["order"])))
+                and self.multiple
+            )
         else:
             valid = False
         if not valid:
@@ -267,6 +275,7 @@ class PremiumCheckout(models.Model):
     amount = models.PositiveIntegerField()
     currency = models.CharField(max_length=3)
     paid_at = models.DateTimeField(null=True)
+    premium_until = models.DateTimeField(null=True)
     event_id = models.CharField(max_length=255, unique=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

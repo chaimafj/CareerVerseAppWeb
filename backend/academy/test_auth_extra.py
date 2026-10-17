@@ -1,4 +1,5 @@
 import re
+import smtplib
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -149,3 +150,32 @@ class ExtraAuthTests(TestCase):
                 self.assertEqual(self.request_reset().status_code, 503)
         with override_settings(EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend", EMAIL_HOST=""):
             self.assertEqual(self.request_reset().status_code, 503)
+
+    def test_reset_rejects_missing_invalid_email_without_sending(self):
+        for body in [{}, {"email": ""}, {"email": "not-an-email"}]:
+            with self.subTest(body=body), patch("academy.auth_extra.send_mail") as send:
+                self.assertEqual(self.post("/api/auth/password-reset/", body).status_code, 400)
+                send.assert_not_called()
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+        EMAIL_HOST="smtp-relay.brevo.com",
+        DEFAULT_FROM_EMAIL="CareerVerse <sender@example.test>",
+    )
+    def test_smtp_reset_acceptance_and_explicit_delivery_failures(self):
+        with patch("academy.auth_extra.send_mail", return_value=1) as send:
+            self.assertEqual(self.request_reset(self.user.email.upper()).status_code, 200)
+            subject, body, sender, recipients = send.call_args.args
+            self.assertIn("CareerVerse", subject)
+            self.assertIn("http://127.0.0.1:4200/reset-password/", body)
+            self.assertEqual(sender, "CareerVerse <sender@example.test>")
+            self.assertEqual(recipients, [self.user.email])
+        for result in [0, smtplib.SMTPAuthenticationError(535, b"Invalid credentials"), OSError("offline")]:
+            with self.subTest(result=result), patch("academy.auth_extra.send_mail") as send:
+                if isinstance(result, Exception):
+                    send.side_effect = result
+                else:
+                    send.return_value = result
+                response = self.request_reset()
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json()["detail"], "Unable to send reset email. Please retry later.")

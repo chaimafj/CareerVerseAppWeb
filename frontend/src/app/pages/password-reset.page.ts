@@ -17,8 +17,11 @@ import { AppIconComponent } from '../widgets/app-icon.component';
       <p class="muted">{{ (confirming ? 'Choose a strong password that you have not used before.' : 'Enter your email address to request a reset link.') | t }}</p>
       @if (error()) { <div class="error" role="alert">{{ error() | t }}</div> }
       @if (success()) {
-        <div class="success-message" role="status">{{ (confirming ? 'Password reset successfully. Sign in with your new password.' : 'If an eligible account exists, a reset link has been sent.') | t }}</div>
-        @if (!confirming) { <p class="small muted">{{ 'The link expires in one hour. Check your inbox and spam folder.' | t }}</p> }
+        <div class="success-message" role="status">
+          @if (confirming) { {{ 'Password reset successfully. Sign in with your new password.' | t }} }
+          @else { {{ 'A password reset link has been sent to' | t }} <bdi>{{ email.trim() }}</bdi>. }
+        </div>
+        @if (!confirming) { <p class="small muted">{{ 'If this address belongs to an eligible account, check your inbox and spam folder. The link expires in one hour.' | t }}</p> }
       } @else {
         <form #form="ngForm" (ngSubmit)="submit()" class="form-stack">
           @if (confirming) {
@@ -55,12 +58,15 @@ export class PasswordResetPage {
     }
     this.busy.set(true);
     try {
-      await this.api.csrf();
-      const body = this.confirming
-        ? {uid: this.params.get('uid'), token: this.params.get('token'), password: this.password}
-        : {email: this.email.trim()};
-      await this.api.post(this.confirming ? 'auth/password-reset/confirm/' : 'auth/password-reset/', body, {'Accept-Language': this.locale.language()});
-      if (this.confirming) this.auth.user.set(null);
+      if (this.confirming) {
+        await this.api.csrf();
+        await this.api.post('auth/password-reset/confirm/', {
+          uid: this.params.get('uid'), token: this.params.get('token'), password: this.password,
+        }, {'Accept-Language': this.locale.language()});
+        this.auth.user.set(null);
+      } else {
+        await this.auth.requestPasswordReset(this.email);
+      }
       this.password = ''; this.confirm = '';
       this.success.set(true);
     } catch(error) { this.error.set(errorMessage(error)); }

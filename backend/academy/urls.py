@@ -4,19 +4,21 @@ from . import views
 from .chat_views import ChatView
 from .profile_photo import ProfilePhotoView
 from .auth_extra import GoogleConfigView, GoogleLoginView, PasswordResetConfirmView, PasswordResetRequestView
-from .billing import BillingStatusView, CheckoutView, webhook
+from .billing import BillingStatusView, CheckoutView, ConfirmCheckoutView, webhook
 from .push import (
-    NotificationListView, NotificationReadView, PushConfigView, PushTestView, SubscriptionView,
+    NotificationCountView, NotificationListView, NotificationReadView, PushConfigView, PushTestView, SubscriptionView,
 )
 
 urlpatterns = [
     path("billing/status/", BillingStatusView.as_view()),
     path("billing/checkout/", CheckoutView.as_view()),
+    path("billing/confirm/", ConfirmCheckoutView.as_view()),
     path("billing/webhook/", webhook),
     path("push/config/", PushConfigView.as_view()),
     path("push/subscriptions/", SubscriptionView.as_view()),
     path("push/test/", PushTestView.as_view()),
     path("notifications/", NotificationListView.as_view()),
+    path("notifications/count/", NotificationCountView.as_view()),
     path("notifications/<int:pk>/read/", NotificationReadView.as_view()),
     path("chat/", ChatView.as_view()),
     path("csrf/", views.csrf),

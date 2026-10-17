@@ -32,7 +32,9 @@ class WorkshopTests(TestCase):
 
     def test_code_answer_keys_hidden_and_typed_answers_graded_on_server(self):
         attempt, public = self.start("angular")
-        self.assertTrue(all(task["kind"] == "code" and task["options"] == [] for task in public["questions"]))
+        self.assertTrue(all(task["kind"] == "code" and task["options"] == [] for task in public["questions"][:4]))
+        self.assertEqual(public["questions"][4]["kind"], "sequence")
+        self.assertNotIn("order", public["questions"][4]["workspace"])
         self.assertEqual(set(public["questions"][0]["workspace"]), {"before", "after"})
         answers = correct_answers(attempt.snapshot)
         answers[0]["code_text"] = "window.location.search"
@@ -62,7 +64,8 @@ class WorkshopTests(TestCase):
 
     def test_architecture_mapping_wrong_node_and_foreign_options(self):
         attempt, public = self.start("cloud")
-        self.assertTrue(all(task["kind"] == "architecture" for task in public["questions"]))
+        self.assertTrue(all(task["kind"] == "architecture" for task in public["questions"][:4]))
+        self.assertEqual(public["questions"][4]["kind"], "sequence")
         self.assertEqual(public["questions"][0]["workspace"]["nodes"][1], "")
         answers = correct_answers(attempt.snapshot)
         answers[0]["option_ids"] = [attempt.snapshot["questions"][0]["options"][0]["id"]]
@@ -74,7 +77,7 @@ class WorkshopTests(TestCase):
     def test_evidence_exact_selection_and_code_in_mixed_workshop(self):
         attempt, public = self.start("cybersecurity")
         self.assertEqual([task["kind"] for task in public["questions"]],
-                         ["evidence", "evidence", "code", "architecture", "evidence"])
+                         ["evidence", "evidence", "code", "architecture", "sequence"])
         answers = correct_answers(attempt.snapshot)
         answers[0]["option_ids"].pop()
         self.assertEqual(grade(attempt.snapshot, answers, 10)["correct"], 4)

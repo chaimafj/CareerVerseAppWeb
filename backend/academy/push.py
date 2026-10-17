@@ -160,6 +160,11 @@ class SubscriptionView(APIView):
         return Response(status=204)
 
 
+class NotificationCountView(APIView):
+    def get(self, request):
+        return Response({"unread_count": Notification.objects.filter(user=request.user, read=False).count()})
+
+
 class NotificationListView(APIView):
     def get(self, request):
         return Response([notification_data(n) for n in Notification.objects.filter(user=request.user)[:50]])

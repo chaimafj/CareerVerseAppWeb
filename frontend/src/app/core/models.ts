@@ -101,7 +101,7 @@ export interface Question {
   prompt: string;
   multiple: boolean;
   options: {id: number; text: string}[];
-  kind?: 'quiz' | 'code' | 'architecture' | 'evidence';
+  kind?: 'quiz' | 'code' | 'architecture' | 'evidence' | 'sequence';
   workspace?: WorkshopWorkspace;
 }
 

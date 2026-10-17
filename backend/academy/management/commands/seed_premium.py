@@ -3,17 +3,23 @@ from django.db import transaction
 
 from academy.models import Career, Course, Lab, Option, Question
 from academy.premium_workshops import PREMIUM_LABS
+from academy.extended_premium import PREMIUM_LABS as EXTENDED_PREMIUM_LABS
 
 
 class Command(BaseCommand):
-    help = "Upsert three Premium capstones without changing free labs, users or historical attempts."
+    help = "Upsert Premium simulations for seeded careers without changing free labs or historical attempts."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        for data in PREMIUM_LABS:
+        seeded = 0
+        skipped = []
+        for data in [*PREMIUM_LABS, *EXTENDED_PREMIUM_LABS]:
             try:
                 career = Career.objects.get(slug=data["career"])
             except Career.DoesNotExist as exc:
+                if data in EXTENDED_PREMIUM_LABS:
+                    skipped.append(data["career"])
+                    continue
                 raise CommandError("Run seed_demo before seed_premium.") from exc
             lab, _ = Lab.objects.update_or_create(
                 career=career, level=3, is_premium=True,
@@ -42,4 +48,12 @@ class Command(BaseCommand):
                 lab=lab, defaults={"career": career, "title": data["title"],
                                   "intro": data["scenario"], "lessons": lessons},
             )
-        self.stdout.write(self.style.SUCCESS("Seeded 3 Premium workshops, 3 courses and 15 interactive tasks."))
+            seeded += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"Seeded {seeded} Premium simulations, {seeded} courses and {seeded * 5} interactive tasks."
+        ))
+        if skipped:
+            self.stdout.write(self.style.WARNING(
+                "Extended careers not installed: " + ", ".join(skipped)
+                + ". Run seed_extended then seed_premium for all nine simulations."
+            ))

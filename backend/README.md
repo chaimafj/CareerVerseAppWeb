@@ -11,6 +11,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py seed_extended
 .\.venv\Scripts\python.exe manage.py seed_premium
 .\.venv\Scripts\python.exe manage.py createsuperuser
 .\.venv\Scripts\python.exe manage.py test academy
@@ -52,6 +53,25 @@ the question editor. Attempts/results are read-only in admin to protect history.
 * `DJANGO_ALLOWED_HOSTS`: optional comma-separated deployment hosts. `localhost`,
   `127.0.0.1` and `testserver` are always allowed. No `.env` auto-loading.
 
+## Extended educational catalogue
+
+`seed_extended` independently and atomically upserts DevOps, Machine Learning,
+Deep Learning, AI Engineering, Data Science and Full-Stack Development. Each path
+has three free labs, one preparation course per lab, three lessons per course and
+three quiz questions per lab (18 courses/labs and 54 questions added). Together
+with `seed_demo` and a subsequent `seed_premium`, this gives nine careers and 36 courses/labs.
+It can run on its own, or after the original seeds. Re-running retains IDs and
+refreshes only extended content, without deleting users, completion records,
+attempt snapshots or results. All new paths participate in existing assessments,
+progress, recommendation and chatbot endpoints. No schema migration is needed.
+Content is an educational scenario quiz, not an executable training environment.
+
+Run the focused regression suite with:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py test academy.test_extended_catalog
+```
+
 ## Browser session + CSRF
 
 Use a **same-origin frontend development proxy** for `/api/` to this backend,
@@ -66,11 +86,13 @@ requires these process environment variables (no keys are included in source):
 * `STRIPE_SECRET_KEY`: your **`sk_test_…`** key. Live keys disable billing.
 * `STRIPE_WEBHOOK_SECRET`: the **`whsec_…`** signing secret from Stripe CLI or
   your test webhook endpoint. This is not the API secret.
-* `STRIPE_PRICE_ID`: an active **test-mode, fixed, one-time** `price_…`.
+* `STRIPE_PRICE_ID`: an active **test-mode, fixed, one-time** `price_…`
+  for **499 cents in EUR (EUR 4.99)**. Other amounts/currencies are rejected.
   Amount and currency are retrieved from this price, never from the browser.
 * `WEB_APP_ORIGIN`: defaults to `http://127.0.0.1:4200`; must be an origin
   without credentials/path/query/fragment. HTTPS is required except localhost
-  and 127.0.0.1 development origins. Redirects use `/premium?checkout=success`
+  and 127.0.0.1 development origins. Redirects use
+  `/premium?checkout=success&session_id={CHECKOUT_SESSION_ID}`
   or `/premium?checkout=cancelled`.
 
 PowerShell example: `$env:STRIPE_SECRET_KEY = '<your test key>'` (and similarly
@@ -94,18 +116,47 @@ and currency grants premium. Signed event and Stripe-retrieved session are
 validated. Duplicate events (including different event IDs for the same session)
 grant nothing extra. Each distinct paid checkout atomically adds exactly 30 days
 from `max(now, premium_until)`. Frontend redirects never grant access.
+This is a one-time payment, **not an automatically renewing subscription**.
+Existing Premium users may purchase another 30 days. Each successful checkout
+stores its resulting `premium_until` atomically with the entitlement change.
+Historical paid rows created before migration 0011 retain `premium_until: null`:
+their original grant boundary is unknown and is not reconstructed.
 
 | Method / path | Request | Response |
 |---|---|---|
-| GET `/api/billing/status/` | none | `{configured: boolean, premium_until: ISO-string or null, is_premium: boolean}` |
+| GET `/api/billing/status/` | optional `?session_id=cs_…` | `{configured, premium_until, is_premium, amount:499, currency:"eur", duration_days:30, checkout_status:"paid"\|"pending"\|null, transactions:[...]}` |
 | POST `/api/billing/checkout/` | `{}`; client pricing ignored | `{url: string}` |
+| POST `/api/billing/confirm/` | `{session_id: string}`; authenticated with CSRF | `{checkout_status:"paid"\|"pending"}` |
 | POST `/api/billing/webhook/` | Stripe signed event | `{received: true}` |
+
+`checkout_status` describes only the supplied session belonging to the current
+user; missing/foreign sessions return null. This allows return polling to confirm
+a renewal without mistaking existing Premium access for payment confirmation.
+`transactions` contains only the authenticated user's paid checkouts, newest
+first, with `{id, amount, currency, created_at, paid_at, premium_until}`.
+No card details, Stripe credentials or webhook/session IDs are cached.
+The Angular page stores a validated copy in IndexedDB (`careerverse-billing`,
+`history` store, keyed by user ID). A failed server refresh shows the account's
+last saved history with an offline warning, never a cached entitlement.
+Copies remain available on this browser for the same account after sign-in;
+other accounts never read that account's cache through the app. This is not
+offline authentication or offline Premium access. Storage failures are visible.
 
 Unconfigured/invalid test settings return `configured:false` on status and
 explicit 503 on checkout/webhook. Invalid signature/live/mismatched checkout
 returns 400; unpaid or irrelevant test events are acknowledged without a grant.
 Provider checkout failures return 502; webhook verification failures return 503
 so Stripe retries.
+
+On a successful return, the frontend verifies pending own purchases through
+`billing/confirm/`. Django retrieves the session directly from Stripe using its
+secret key and checks the same persisted user, metadata, test mode, completed
+status, paid status, amount, currency, price and line-item quantity as the webhook.
+The URL and client payload never establish payment. Unpaid sessions remain pending,
+foreign sessions return 404, mismatches return 400, and provider failures return
+503 without access. Confirmations and webhooks share an atomic grant function:
+retries or a later webhook never add another 30 days for the same purchase.
+Keep webhook forwarding active for payments completed without a browser return.
 
 ## Real Web Push and durable notifications
 
@@ -135,6 +186,7 @@ POST/DELETE requires the current CSRF token. No anonymous subscriptions:
 | DELETE `/api/push/subscriptions/` | `{endpoint}` | 204, own subscription only |
 | POST `/api/push/test/` | `{}` | 201 own notification; enqueue only, 400 if not subscribed |
 | GET `/api/notifications/` | none | latest 50, bare array of `{id,title,body,path,read,created_at}` |
+| GET `/api/notifications/count/` | none | `{unread_count: integer}` for all own unread records, not limited to 50 |
 | POST `/api/notifications/<id>/read/` | `{}` | same notification shape; 404 for foreign/missing ID |
 
 Subscribe/test returns 503 if push is disabled. Subscriptions are validated:
@@ -245,14 +297,43 @@ registration, login and submission fields are rejected.
   validates a one-hour, single-use Django token and the existing password rules.
   Changing the password invalidates previous sessions. Both endpoints require
   CSRF and are IP rate-limited (5 requests/hour, 20 confirmations/hour).
-- In DEBUG mode the default Django file email backend writes messages to
-  `backend/private-emails/` (ignored, not served). Open the local message file
-  privately to use its link; no real e-mail is sent in this mode.
+- SMTP is the default email backend, including in DEBUG mode. Without a
+  configured SMTP host, password recovery returns an explicit 503, not success.
+  For offline development only, explicitly select
+  `EMAIL_BACKEND=django.core.mail.backends.filebased.EmailBackend`; this writes
+  messages to ignored `backend/private-emails/` and does **not** send real mail.
 - Real SMTP: set `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`,
   `EMAIL_HOST`, `EMAIL_PORT` (587 default), `EMAIL_HOST_USER`,
   `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS=1` and `DEFAULT_FROM_EMAIL` locally.
   Set `WEB_APP_ORIGIN` to the trusted frontend HTTPS origin in production.
   Never commit SMTP credentials, saved mails, reset tokens or links.
+- Brevo: activate SMTP, verify your sender address, then copy the SMTP login
+  and SMTP key from your Brevo account (the SMTP key is not the REST API key).
+  Create an ignored `backend\local-settings.ps1` locally with these assignments.
+  Replace the placeholders privately; never paste credentials into chat:
+
+  ```powershell
+  $env:EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+  $env:EMAIL_HOST = 'smtp-relay.brevo.com'
+  $env:EMAIL_PORT = '587'
+  $env:EMAIL_USE_TLS = '1'
+  $env:EMAIL_HOST_USER = '<Brevo SMTP login>'
+  $env:EMAIL_HOST_PASSWORD = '<Brevo SMTP key>'
+  $env:DEFAULT_FROM_EMAIL = 'CareerVerse <your-verified-sender@example.com>'
+  $env:WEB_APP_ORIGIN = 'http://127.0.0.1:4200'
+  ```
+
+  Restart Django from the backend directory in a shell that loads the settings:
+
+  ```powershell
+  . .\local-settings.ps1
+  .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+  ```
+
+  `.env` files are not auto-loaded. To verify real delivery, use an active
+  email/password account whose inbox you control, click **Forgot your password?**
+  on the login page and open the received link. SMTP acceptance alone does not
+  guarantee inbox placement; also check Brevo delivery logs and spam.
 - GET `/api/auth/google/config/` supplies the public OAuth client ID and a
   random session-bound nonce. POST `/api/auth/google/` accepts `{credential}`.
   The server verifies the Google ID token's signature, expiry, issuer, audience,
@@ -347,10 +428,24 @@ Django admin permissions can maintain the catalog.
 
 ### Quizzes
 
-`seed_demo` retains nine free labs. After it, `seed_premium` idempotently upserts
-three advanced Premium workshops with five interactive tasks and one course each.
-Both commands retain users and historical attempt snapshots. Migration `0005`
+`seed_demo` retains nine free labs; `seed_extended` adds 18 more. After both,
+`seed_premium` idempotently upserts nine advanced Premium simulations with five
+interactive tasks and one five-lesson course each (45 Premium tasks total).
+Without extended careers it seeds the original three and prints an explicit
+instruction to run `seed_extended` followed by `seed_premium` for all nine.
+The original simulations now combine multiple formats, including workflow tasks.
+All commands retain users and historical attempt snapshots. Migration `0005`
 adds mission fields and separates free/Premium uniqueness within each career level.
+
+Apply migration `0010` for the `sequence` task kind. Its private workspace has
+`{context, order}` where `order` is a zero-based permutation of the stored option
+positions. All stages are marked correct; the order is the answer key. Snapshot
+validation checks the stage count and permutation. Public attempts expose only
+`{context}`. Submit the ordered stage IDs in `option_ids`; exact ordering is graded
+server-side. Duplicates, foreign IDs and code payloads on workflows are rejected.
+Incomplete or incorrect orders receive an incorrect task result. Feedback retains
+the submitted and expected order, and reseeding never changes an existing snapshot.
+No submitted code is executed and no external service is provisioned.
 
 GET `/api/labs/<id>/` (authenticated) returns `{id,title,career_title,career_slug,
 level,is_premium,locked,scenario,objectives,expected_seconds,question_count}`.
@@ -382,7 +477,8 @@ skills at start. Catalog edits/deletion cannot change correction or result text.
 Migration `0006` adds task `kind` and validated JSON `workspace` fields:
 `quiz` (empty workspace), `code` (`before,after` strings),
 `architecture` (`nodes` string array and zero-based missing `gap`),
-`evidence` (`context` string). No raw SVG/HTML is stored; Angular renders escaped
+`evidence` (`context` string). Migration `0010` adds `sequence` (private
+`context,order`, public `context` only). No raw SVG/HTML is stored; Angular renders escaped
 text within a fixed SVG template. Workspace validation rejects invalid configurations
 before attempt creation. Old snapshots default to `quiz`.
 An empty/misconfigured lab returns 400 without creating an attempt.

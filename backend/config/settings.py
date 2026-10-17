@@ -110,7 +110,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 PASSWORD_RESET_TIMEOUT = 3600
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",
-    "django.core.mail.backends.filebased.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend",
+    "django.core.mail.backends.smtp.EmailBackend",
 )
 EMAIL_FILE_PATH = BASE_DIR / "private-emails"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")

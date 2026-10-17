@@ -1,5 +1,5 @@
 import { LocaleService, TranslatePipe } from './core/locale.service';
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IonicModule } from '@ionic/angular';
@@ -8,6 +8,7 @@ import { errorMessage } from './core/api.service';
 import { ChatPage } from './pages/chat.page';
 import { PushService } from './core/push.service';
 import { AppIconComponent } from './widgets/app-icon.component';
+import { NotificationCountService } from './core/notification-count.service';
 
 @Component({
   selector: 'app-root',
@@ -30,6 +31,11 @@ import { AppIconComponent } from './widgets/app-icon.component';
               {{ (dark() ? 'Light theme' : 'Dark theme') | t }}
             </button>
             @if (auth.user(); as user) {
+              <a routerLink="/notifications" class="notification-bell" [attr.aria-label]="('Notifications' | t) + ' · ' + (notificationCount.error() ? ('Notification count unavailable' | t) : notificationCount.unread() + ' ' + ('Unread notifications' | t))" [attr.title]="(notificationCount.error() ? 'Notification count unavailable' : 'Notifications') | t">
+                <app-icon name="bell" />
+                @if (notificationCount.error()) { <span class="notification-badge" aria-hidden="true">!</span> }
+                @else if (notificationCount.unread() > 0) { <span class="notification-badge" aria-hidden="true">{{ notificationCount.unread() }}</span> }
+              </a>
               <a routerLink="/profile" class="avatar" [attr.aria-label]="('My profile' | t) + ' · ' + user.name">@if (user.photo_url) { <img [src]="user.photo_url" alt=""> } @else { {{ user.name.slice(0, 1).toUpperCase() }} }</a>
             }
           </div>
@@ -42,7 +48,7 @@ import { AppIconComponent } from './widgets/app-icon.component';
             <a routerLink="/labs" routerLinkActive="active"><app-icon name="lab" /> {{ 'Labs' | t }}</a>
             <a routerLink="/recommendations" routerLinkActive="active"><app-icon name="sparkles" /> {{ 'Your matches' | t }}</a>
             <a routerLink="/profile" routerLinkActive="active"><app-icon name="user" /> {{ 'My profile' | t }}</a>
-            <a routerLink="/notifications" routerLinkActive="active"><app-icon name="bell" />{{ 'Notifications' | t }}</a>
+            <a routerLink="/notifications" routerLinkActive="active"><app-icon name="bell" />{{ 'Notifications' | t }}@if (!notificationCount.error() && notificationCount.unread() > 0) { <span class="nav-notification-count">{{ notificationCount.unread() }}</span> }</a>
             <a routerLink="/premium" routerLinkActive="active"><app-icon name="crown" />{{ 'Premium' | t }}</a>
             @if (auth.user()?.is_staff) {
               <a href="/admin/" target="_blank" rel="noopener"><app-icon name="shield" /> {{ 'Administration' | t }}</a>
@@ -59,12 +65,7 @@ import { AppIconComponent } from './widgets/app-icon.component';
       </div>
       @if (auth.user() && !onChatPage) {
         <button class="assistant-fab" [attr.aria-label]=" 'Open CareerVerse assistant' | t " aria-haspopup="dialog" [attr.aria-expanded]="chatOpen()" (click)="chatOpen.set(true)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M12 3v3M9 3h6M5 10H3v7h2m14-7h2v7h-2"/>
-            <rect x="5" y="6" width="14" height="15" rx="4"/>
-            <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
-            <path d="M9 17h6"/>
-          </svg>
+          <app-icon name="chatbot" />
           <span>{{ 'Career assistant' | t }}</span>
         </button>
         <ion-modal class="assistant-modal" [isOpen]="chatOpen()" (didDismiss)="chatOpen.set(false)" [attr.aria-label]=" 'CareerVerse assistant' | t ">
@@ -84,6 +85,7 @@ export class AppComponent {
   readonly locale = inject(LocaleService);
   private readonly push = inject(PushService);
   readonly auth = inject(AuthService);
+  readonly notificationCount = inject(NotificationCountService);
   private readonly router = inject(Router);
   readonly dark = signal(localStorage.getItem('cv-web-theme') === 'dark');
   readonly error = signal('');
@@ -92,8 +94,21 @@ export class AppComponent {
   get onChatPage() { return this.router.url.split('?')[0] === '/chat'; }
   constructor() {
     this.applyTheme();
+    effect(onCleanup => {
+      const userId = this.auth.user()?.id;
+      this.notificationCount.reset();
+      if (userId === undefined) return;
+      void this.notificationCount.refresh();
+      const timer = setInterval(() => {
+        if (document.visibilityState === 'visible') void this.notificationCount.refresh();
+      }, 30000);
+      onCleanup(() => clearInterval(timer));
+    });
     this.router.events.pipe(takeUntilDestroyed()).subscribe(event => {
-      if (event instanceof NavigationEnd) this.chatOpen.set(false);
+      if (event instanceof NavigationEnd) {
+        this.chatOpen.set(false);
+        void this.notificationCount.refresh();
+      }
     });
   }
   toggleTheme() {

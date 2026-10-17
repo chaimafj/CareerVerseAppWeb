@@ -19,6 +19,12 @@ for the frontend and **Django + Django REST Framework** for the API.
   Photos are stored in the user's database record and served only through the
   authenticated `/api/me/photo/` endpoint, not a public media directory.
 - Searchable career catalogue with category filters and detailed career pages.
+  The catalogue uses three cards per row on desktop, two on tablet and one on
+  mobile, with larger card titles (26px), descriptions (18px) and tool labels (15px)
+  at the default browser text size.
+- Larger, browser-scalable typography throughout the app: 18px base body text,
+  16px form inputs/buttons and 14–15px secondary labels at the default root size.
+  Overview, carousel captions and mobile navigation use the same enlarged scale.
 - Courses with practical examples and persisted completion.
 - Separate **Courses** and **Labs** navigation/catalogue pages. Finishing a course
   saves completion and stays on that course; it never starts or redirects to a lab.
@@ -27,7 +33,7 @@ for the frontend and **Django + Django REST Framework** for the API.
   Both catalogues group their content into separate career sections, preserving
   order, completion status and Premium badges. Labs also retain correction links.
 - Nine free beginner/intermediate/advanced labs with mission briefings and objectives.
-- Three Premium workshops with five interactive tasks each, preparation courses,
+- Nine Premium simulations with five interactive tasks each, preparation courses,
   answer review navigation and detailed correction (selected versus expected choices).
 - Server-side correction, timing, per-skill scores and immutable attempt snapshots.
 - Persisted results, attempt history and best-attempt progress.
@@ -44,6 +50,16 @@ for the frontend and **Django + Django REST Framework** for the API.
   shown. The current assessment appears on results, career details and Labs.
   This educational threshold is separate from each lab's 70% pass threshold.
 - Responsive Ionic UI, persistent light/dark theme, explicit loading/error/empty states.
+- Refreshed welcome and dashboard with local SVG career illustrations, animated
+  cards and learning shortcuts. The shared illustration carousel rotates every
+  6.5 seconds, with previous/next, direct selection and play/pause controls.
+  Hover pauses rotation; keyboard focus or manual selection pauses until Play.
+  Hidden tabs do not advance. Reduced-motion users start with autoplay disabled;
+  motion effects are disabled. Controls and captions support FR/EN/AR and RTL.
+  Overview has its own immersive banner and original isometric workstation,
+  cloud infrastructure and security-vault SVG scenes, also used on career-match
+  cards. Staggered card entrances, floating scene layers and animated data paths
+  respect reduced motion; the welcome page keeps its existing illustrations.
 - Django administration for staff users to manage the catalogue and accounts.
 - Local career chatbot with catalogue/course links, personal results explanations,
   interest guidance, limited career follow-up context and private saved history.
@@ -52,17 +68,41 @@ for the frontend and **Django + Django REST Framework** for the API.
 - Stripe test-mode Checkout with signed webhook verification for 30-day Premium access.
 
 Seed content includes Angular development, cloud engineering and cybersecurity.
+Run `seed_extended` to also add DevOps Engineer, Machine Learning Engineer,
+Deep Learning Engineer, AI Engineer, Data Scientist and Full-Stack Developer.
+Each additional path includes three free courses (three illustrated-by-example
+lessons each) and three scenario quizzes, with three questions per quiz.
+The expanded catalogue has nine careers, 27 free labs/courses and nine Premium
+simulations/courses (36 labs/courses total, 126 questions/tasks including Premium).
+The extension is idempotent, does not reset the original catalogue and preserves
+users, course completions, attempt snapshots and historical results. Run it again
+to refresh only these six paths. New interests, categories, recommendations and
+chat suggestions use the catalogue automatically. Lessons and quiz content remain
+in English; career titles, summaries, categories and interests support FR/EN/AR.
 The nine original labs remain free. Active Premium unlocks **Launch-day checkout
 rescue** (Angular), **Restore service under pressure** (Cloud) and **Investigate
 a suspicious account** (Cybersecurity). Each capstone has a ten-minute recommended
 duration. Django checks entitlement before opening its course, completing it or
 starting the lab; a public catalogue preview does not expose lesson content or answers.
 An attempt started while Premium is active can still be submitted after expiry,
-and its owner's historical results remain readable. Progress counts all twelve labs.
+and its owner's historical results remain readable. Progress counts all seeded labs
+(36 with the extended catalogue and Premium simulations).
 Premium formats are distinct from free quizzes:
-- Angular: type missing code fragments into a live code preview.
-- Cloud: place components into highlighted slots in original SVG architecture diagrams.
-- Cybersecurity: mark synthetic evidence rows, repair an owner check and review containment flow.
+- Angular: repair code and sequence a guarded release.
+- Cloud: complete architecture diagrams and build a recovery drill.
+- Cybersecurity: inspect evidence, repair owner checks and sequence trusted recovery.
+- DevOps: assemble a pipeline, configure a rollout and inspect canary telemetry.
+- Machine Learning: repair preprocessing, calculate recall and order model promotion.
+- Deep Learning: repair a training step, inspect overfitting and validate compression.
+- AI: build grounded retrieval, review access boundaries and control tool execution.
+- Data Science: repair SQL, audit an experiment and build a reproducible report.
+- Full-Stack: repair ownership/idempotency, protect reservations and plan compatible delivery.
+
+Workflow tasks use an available-stage bank and an ordered execution canvas with
+keyboard-accessible add, remove and move-up/down buttons. Every stage must be placed
+before submission. The expected order stays server-side until correction; grading
+compares the actual submitted order, not just selected membership. Each simulation
+has five preparation lessons and five tasks, with at least two interaction formats.
 
 Scoring is unchanged: task accuracy contributes 80%, server-measured
 timing contributes 20%, and the pass threshold is 70/100. Content is educational
@@ -71,7 +111,10 @@ the requested exact fragment after trimming leading/trailing whitespace; they do
 compile or execute arbitrary code or claim to accept every equivalent implementation.
 Diagrams are simplified flow models, not drag-and-drop infrastructure deployment.
 Corrections preserve the workspace and show the repaired code or expected architecture
-flow. Migration `0006` and `seed_premium` update new attempts while retaining old snapshots.
+flow. Apply migrations (including `0010` for workflow tasks), run `seed_extended`
+then `seed_premium` for all nine simulations. Re-seeding retains old attempt snapshots.
+Without the extension, `seed_premium` still installs the original three and explicitly
+reports which extended careers are missing.
 
 This initial web version does **not** yet include Google login, password-reset
 email UI, translated educational catalogue content, ESCO search,
@@ -96,6 +139,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py seed_extended
 .\.venv\Scripts\python.exe manage.py seed_premium
 .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
@@ -157,6 +201,7 @@ set `DATABASE_URL` before running migrations and starting Django:
 $env:DATABASE_URL = 'postgresql://careerverse:<password>@127.0.0.1:5432/careerverse'
 .\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py seed_extended
 .\.venv\Scripts\python.exe manage.py seed_premium
 .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
@@ -190,13 +235,39 @@ Leaving or refreshing an unfinished quiz discards the current browser selections
 The server retains the unfinished attempt, which is not counted as a completion.
 Finishing an attempt counts as completed even when its score is below the pass mark.
 
+## Notifications interface
+
+The signed-in header includes a bell with a red badge for the exact unread count;
+the sidebar repeats the badge. Zero unread notifications hide the badge. The
+owner-private `GET /api/notifications/count/` counts all unread records, even
+though the inbox displays only the latest 50. Counts refresh on sign-in,
+navigation, inbox refresh, successful read/deletion and every 30 seconds while
+the page is visible. Account changes clear the count and discard stale responses.
+Failures show a warning on the bell and an explicit retry in the inbox rather
+than pretending there are no unread notifications. The redesigned inbox includes
+read/unread filters, dated updates, keyboard access and a mobile/dark/RTL layout.
+
+## Your matches interface
+
+The recommendations page presents the existing server ranking in illustrated
+cards: three columns on desktop, two on tablets and one on mobile. A summary shows
+the returned career count, tested careers and highest score. Each card keeps the
+server score, lab evidence, shared interests and career link; the top result is
+highlighted without changing the scoring algorithm. The score explanation is
+expandable. Dark mode, RTL and reduced-motion preferences are supported.
+
 ## Career assistant
 
-The floating purple robot button opens the assistant in an Ionic modal without
+The floating blue/violet guidance button opens the assistant in an Ionic modal without
 leaving the current page. It is available to signed-in students, not in the
 AppBar or main navigation. Suggested links close the modal and open the relevant
 page; the saved conversation is restored when reopened. `/chat` remains a
 direct full-page route and hides the floating button to avoid duplicate chats.
+Both views share a professional conversation layout: guidance header, privacy
+notice, suggested-question cards, distinct user/assistant messages, dated replies,
+resource links and a focused question composer with a character counter.
+Choosing a suggestion fills and focuses the input without sending it automatically.
+The layout supports mobile, dark mode, RTL and reduced-motion preferences.
 
 The assistant uses an authenticated Django endpoint:
 `GET /api/chat/` loads history, `POST /api/chat/` accepts a `message`,
@@ -234,8 +305,13 @@ Stripe credentials/price and Stripe CLI webhook forwarding.
 ### Password recovery and Google
 
 The login page includes **Forgot your password?**, localized request/reset forms
-and a **Continue with Google** integration. Development reset emails are saved
-privately in the ignored backend mailbox, rather than sent over SMTP.
+and a **Continue with Google** integration. Enter your email on the login page
+before clicking password recovery; no password is required. An empty or invalid
+email shows guidance without sending a request. After the API accepts the request,
+the page displays the entered email and inbox guidance. Responses do not reveal
+whether an account exists. Password recovery uses real SMTP by default, including
+in development; configure a provider such as Brevo first. Missing configuration
+or delivery failures display an error, not a successful-send message.
 Google is disabled with an explanation until `GOOGLE_CLIENT_ID` is configured;
 it is not a simulated login. See the backend README for SMTP/OAuth setup.
 Existing email/password accounts are not automatically merged with Google accounts.
@@ -270,13 +346,30 @@ push or signing out removes this browser's subscription to avoid cross-account
 notifications. Other registered devices are unaffected.
 
 **Premium** opens Stripe's hosted test-mode Checkout. Only the server's verified
-paid webhook activates or extends access; returning to the app never grants it.
+paid webhook or authenticated server-to-Stripe return verification activates or
+extends access; the return URL alone never grants it.
 After successful Checkout return, the page checks server status up to ten times
 over about 30 seconds, then offers a manual refresh if confirmation is pending.
-Active Premium displays a confirmation and expiry date instead of a payment
-button; pending successful returns also hide payment to discourage duplicates.
-Cancelled returns do not show payment success. This is a one-off purchase, not a
-recurring subscription. Nine original labs are free; the three workshops require Premium.
+The fixed offer is **EUR 4.99 for 30 days** in Stripe **test mode** (no real charge).
+Active members can buy another 30 days, added to their current expiry. They
+see a dedicated Premium dashboard with a member badge, verified expiry,
+course/simulation shortcuts and progress access. Renewal is available in the
+expandable access-management section rather than the initial purchase offer.
+This interface uses server-confirmed entitlement only, never the return URL or
+offline payment history. Reduced-motion preferences disable its entrance animation.
+Successful returns include a Checkout session ID: polling confirms that specific purchase,
+even when Premium is already active. While polling, payment is disabled to
+discourage duplicates. Pending purchases are checked directly with Stripe on
+return, so a stopped local webhook listener does not prevent activation after
+Stripe confirms a matching paid purchase. Both paths share the same atomic,
+idempotent grant operation. Cancelled returns never show payment success. This is a
+one-off purchase, not an automatically recurring subscription.
+Only confirmed payments appear in the account's Django history, with a separate
+IndexedDB copy per account for offline viewing in the same browser. Cached
+history never grants access, and storage/network failures are shown explicitly.
+An authenticated app session is still required; offline history is not an
+offline sign-in or a way to open protected courses/labs.
+All 27 standard labs remain free; the nine advanced simulations require Premium.
 
 ### Local integration configuration (PowerShell)
 
